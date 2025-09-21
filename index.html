@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>RSVP</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem}
+    form, .card{border:1px solid #ddd;border-radius:12px;padding:1rem;margin:1rem 0}
+    label{display:block;margin:.5rem 0 .25rem}
+    input,textarea,select,button{font:inherit;padding:.5rem;border:1px solid #ccc;border-radius:8px;width:100%}
+    .row{display:flex;gap:.75rem}
+    .row>*{flex:1}
+    button{cursor:pointer}
+    .ok{color:green;margin-top:.5rem}
+    .err{color:#b00020;margin-top:.5rem}
+    .list .card{border-color:#eee}
+    small{color:#666}
+  </style>
+</head>
+<body>
+  <h1>Event RSVP</h1>
+  <form id="rsvpForm">
+    <input type="hidden" name="eventId" value="demo-2025"/>
+    <label>Name</label>
+    <input name="name" placeholder="Your name" required/>
+    <label>Email</label>
+    <input type="email" name="email" placeholder="you@example.com" required/>
+    <div class="row">
+      <div>
+        <label>Attending?</label>
+        <select name="attending">
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+      </div>
+      <div>
+        <label># Guests</label>
+        <input type="number" min="0" max="10" name="guests" value="0"/>
+      </div>
+    </div>
+    <label>Message (optional)</label>
+    <textarea name="message" rows="3" placeholder="Anything we should know?"></textarea>
+    <button type="submit">Submit RSVP</button>
+    <div id="status"></div>
+  </form>
+
+  <section>
+    <h2>Responses</h2>
+    <div class="list" id="list"></div>
+  </section>
+
+<script>
+const API = "https://74o0wdsmp1.execute-api.us-east-2.amazonaws.com/"; // e.g., https://abc123.execute-api.us-east-1.amazonaws.com
+
+const form = document.getElementById("rsvpForm");
+const statusEl = document.getElementById("status");
+const listEl = document.getElementById("list");
+
+async function load() {
+  const eventId = form.eventId.value;
+  const res = await fetch(`${API}/rsvps?eventId=${encodeURIComponent(eventId)}`);
+  const data = await res.json();
+  listEl.innerHTML = (data.items || []).map(item => `
+    <div class="card">
+      <div><strong>${escapeHtml(item.name)}</strong> – <small>${new Date(item.createdAt).toLocaleString()}</small></div>
+      <div><small>${escapeHtml(item.email)}</small></div>
+      <div>Attending: ${item.attending ? "Yes" : "No"} | Guests: ${item.guests ?? 0}</div>
+      ${item.message ? `<div>Message: ${escapeHtml(item.message)}</div>` : ""}
+    </div>
+  `).join("") || "<p>No RSVPs yet.</p>";
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]))}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  statusEl.textContent = "";
+  statusEl.className = "";
+
+  const formData = new FormData(form);
+  const payload = {
+    eventId: formData.get("eventId"),
+    name: formData.get("name")?.trim(),
+    email: formData.get("email")?.trim(),
+    attending: formData.get("attending")==="true",
+    guests: Number(formData.get("guests") || 0),
+    message: formData.get("message")?.trim() || ""
+  };
+
+  try {
+    const res = await fetch(`${API}/rsvp`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok) throw new Error(await res.text());
+    statusEl.textContent = "Thanks! Your RSVP is saved.";
+    statusEl.className = "ok";
+    form.reset();
+    form.eventId.value = payload.eventId; // keep same event id
+    await load();
+  } catch (err) {
+    statusEl.textContent = "Submit failed. Check console and API URL/CORS.";
+    statusEl.className = "err";
+    console.error(err);
+  }
+});
+
+load();
+</script>
+</body>
+</html>
